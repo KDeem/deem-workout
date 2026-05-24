@@ -46,7 +46,7 @@
     background-image:
       radial-gradient(circle at 20% 0%, rgba(212, 255, 58, 0.04) 0%, transparent 40%),
       radial-gradient(circle at 80% 100%, rgba(255, 107, 53, 0.03) 0%, transparent 50%);
-    padding-bottom: 90px;
+    padding-bottom: 140px;
     padding-top: env(safe-area-inset-top);
   }
 
@@ -781,6 +781,66 @@
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border-hi); }
 
+  /* STICKY MINI TIMER */
+  .sticky-timer {
+    position: fixed;
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    left: 0;
+    right: 0;
+    z-index: 99;
+    background: rgba(10, 10, 10, 0.97);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+  }
+  .sticky-timer-label {
+    font-size: 9px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    flex-shrink: 0;
+  }
+  .sticky-timer-display {
+    font-family: var(--font-display);
+    font-size: 26px;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    flex: 1;
+    text-align: center;
+    line-height: 1;
+  }
+  .sticky-timer-display.warning { color: var(--warn); }
+  .sticky-timer-display.done { color: var(--accent); }
+  .sticky-timer.running .sticky-timer-label { color: var(--accent); }
+  .sticky-timer-btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 8px 14px;
+    font-family: var(--font-display);
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* NEXT SET HIGHLIGHT */
+  .set-btn.next {
+    border-color: var(--accent);
+    color: var(--accent);
+    animation: nextPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes nextPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(212, 255, 58, 0.5); }
+    50% { box-shadow: 0 0 0 5px rgba(212, 255, 58, 0); }
+  }
+
   /* UTILITY */
   .hidden { display: none !important; }
   .mb-sm { margin-bottom: 12px; }
@@ -1147,6 +1207,12 @@
   </button>
 </nav>
 
+<div class="sticky-timer" id="stickyTimer">
+  <div class="sticky-timer-label">// Rest</div>
+  <div class="sticky-timer-display" id="stickyTimerDisplay">00:45</div>
+  <button class="sticky-timer-btn" id="stickyTimerBtn">START</button>
+</div>
+
 <script>
 // =============================================================
 //  DATA
@@ -1406,6 +1472,7 @@ function renderWorkout(day) {
 
   attachSetClicks();
   updateProgress();
+  updateNextSet();
 }
 
 function attachSetClicks() {
@@ -1418,11 +1485,11 @@ function attachSetClicks() {
       } else {
         state.completed[key] = true;
         btn.classList.add('done');
-        // Auto-start rest timer when set marked complete
         startTimer();
       }
       saveState();
       updateProgress();
+      updateNextSet();
     });
   });
 }
@@ -1569,6 +1636,7 @@ function startTimer() {
   timerRunning = true;
   document.getElementById('timerStart').textContent = 'PAUSE';
   document.getElementById('timerCard').classList.add('running');
+  syncStickyTimer();
   timerInterval = setInterval(() => {
     timerRemaining--;
     const disp = document.getElementById('timerDisplay');
@@ -1581,13 +1649,17 @@ function startTimer() {
       disp.classList.remove('warning');
       disp.classList.add('done');
       disp.textContent = 'GO';
+      syncStickyTimer();
       navigator.vibrate && navigator.vibrate([200, 100, 200]);
       beep();
       setTimeout(() => {
         disp.textContent = formatTime(state.timerSeconds);
         disp.classList.remove('done');
         timerRemaining = state.timerSeconds;
+        syncStickyTimer();
       }, 2000);
+    } else {
+      syncStickyTimer();
     }
   }, 1000);
 }
@@ -1597,6 +1669,7 @@ function pauseTimer() {
   timerRunning = false;
   document.getElementById('timerStart').textContent = 'RESUME';
   document.getElementById('timerCard').classList.remove('running');
+  syncStickyTimer();
 }
 
 function stopTimer() {
@@ -1604,6 +1677,7 @@ function stopTimer() {
   timerRunning = false;
   document.getElementById('timerStart').textContent = 'START';
   document.getElementById('timerCard').classList.remove('running');
+  syncStickyTimer();
 }
 
 function resetTimer() {
@@ -1612,6 +1686,7 @@ function resetTimer() {
   const disp = document.getElementById('timerDisplay');
   disp.textContent = formatTime(state.timerSeconds);
   disp.classList.remove('warning', 'done');
+  syncStickyTimer();
 }
 
 // =============================================================
@@ -1724,6 +1799,30 @@ function beep() {
 }
 
 // =============================================================
+//  STICKY TIMER SYNC + NEXT-SET HIGHLIGHT
+// =============================================================
+function syncStickyTimer() {
+  const sDisp = document.getElementById('stickyTimerDisplay');
+  const sBtn  = document.getElementById('stickyTimerBtn');
+  const sBar  = document.getElementById('stickyTimer');
+  const mDisp = document.getElementById('timerDisplay');
+  sDisp.textContent = mDisp.textContent;
+  sDisp.className = 'sticky-timer-display' +
+    (mDisp.classList.contains('warning') ? ' warning' : '') +
+    (mDisp.classList.contains('done')    ? ' done'    : '');
+  sBtn.textContent = timerRunning ? 'PAUSE' : 'START';
+  sBar.classList.toggle('running', timerRunning);
+}
+
+function updateNextSet() {
+  document.querySelectorAll('.set-btn.next').forEach(b => b.classList.remove('next'));
+  document.querySelectorAll('.set-row').forEach(row => {
+    const first = row.querySelector('.set-btn:not(.done)');
+    if (first) first.classList.add('next');
+  });
+}
+
+// =============================================================
 //  NAV / EVENTS
 // =============================================================
 function switchView(name) {
@@ -1828,6 +1927,10 @@ function setupEvents() {
     else startTimer();
   });
   document.getElementById('timerReset').addEventListener('click', resetTimer);
+  document.getElementById('stickyTimerBtn').addEventListener('click', () => {
+    if (timerRunning) pauseTimer();
+    else startTimer();
+  });
 
   // Finisher
   document.getElementById('finStart').addEventListener('click', () => {
@@ -1901,6 +2004,7 @@ function init() {
 
   renderWorkout(state.currentDay);
   resetFin();
+  syncStickyTimer();
 }
 
 document.addEventListener('DOMContentLoaded', init);
